@@ -93,7 +93,6 @@ func (app *App) handleQoutesList(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	fmt.Println(quotes.Init())
 	quotes.Init()
 	app := &App{
 		storage: map[string]*Quote{},
