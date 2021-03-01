@@ -6,8 +6,9 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"shit/quotes"
 	"strings"
+
+	"github.com/Carsinalys/go/quotes"
 )
 
 type Quote struct {
