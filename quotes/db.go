@@ -1,7 +1,7 @@
 package quotes
 
 import (
-	"time"
+	"fmt"
 
 	"github.com/boltdb/bolt"
 	"github.com/pkg/errors"
@@ -11,83 +11,129 @@ type DB struct {
 	db *bolt.DB
 }
 
-func (base *DB) Init() {
-	db, err := bolt.Open("qoutes.db", 0600, &bolt.Options{Timeout: 1 * time.Second})
+const (
+	quoteBucket = "shit"
+)
 
+// Open opens the database file at path and returns a DB or an error.
+func Open(path string) (*DB, error) {
+	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
-		errors.Wrap(err, "can`t start DB")
-		return
+		return nil, errors.Wrap(err, "Open: cannot open DB file "+path)
 	}
-
-	base.db = db
+	return &DB{
+		db: db,
+	}, nil
 }
 
-// // Open opens the database file at path and returns a DB or an error.
-// func Open(path string) (*DB, error) {
+func (d *DB) Close() error {
+	err := d.db.Close()
+	if err != nil {
+		return errors.Wrap(err, "Close: cannot close database")
+	}
+	return nil
+}
 
-// 	// TODO:
-// 	// Open the DB file at path using bolt.Open().
-// 	// Pass 0600 as file mode, and nil as options.
-// 	// Return a pointer to the open DB, or an error.
+// Create takes a quote and saves it to the database, using the author name
+// as the key. If the author already exists, Create returns an error.
+func (d *DB) Create(q *Quote) error {
+	err := d.db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(quoteBucket))
 
-// }
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+		v := b.Get([]byte(q.Author))
 
-// func (d *DB) Close() error {
+		if v == nil {
+			buffer, err := q.Serialize()
 
-// 	// TODO:
-// 	// Close the database d.db and return any
-// 	// error or nil.
+			if err != nil {
+				return fmt.Errorf("can`t serialize quote: %s", err)
+			}
+			error := b.Put([]byte(q.Author), buffer)
 
-// }
+			if error != nil {
+				return fmt.Errorf("put data to bucket: %s", error)
+			}
+		}
 
-// // Create takes a quote and saves it to the database, using the author name
-// // as the key. If the author already exists, Create returns an error.
-// func (d *DB) Create(q *Quote) error {
-// 	err := d.db.Update(func(tx *bolt.Tx) error {
+		return errors.New("recodr already exists")
+	})
 
-// 		// TODO: Create a bucket if it does not exist already.
-// 		// Use the constant quoteBucket as the bucket name.
-// 		//
-// 		// Remember to use []byte(...) to convert a string into a byte
-// 		// slice if required.
-// 		//
-// 		// Ensure that the quote we want to save does not already exist.
-// 		// Hint: Call bucket.Get and verify if the result has zero length.
-// 		//
-// 		// Serialize the quote, using the Serialize method from quote.go.
-// 		//
-// 		// Put the serialized quote into the bucket.
-// 		//
-// 		// Remember to check all errors.
+	return err
+}
 
-// 	})
+// udate value in DB if it exists
+func (d *DB) Update(q *Quote) error {
+	err := d.db.Update(func(tx *bolt.Tx) error {
+		bucket, err := tx.CreateBucketIfNotExists([]byte(quoteBucket))
+		if err != nil {
+			return err
+		}
 
-// 	// TODO: Check the error returned by d.db.Update. Return an error or nil.
-// }
+		v := bucket.Get([]byte(q.Author))
+		if len(v) != 0 {
+			buffer, err := q.Serialize()
 
-// // Get takes an author name and retrieves the corresponding quote from the DB.
-// func (d *DB) Get(author string) (*Quote, error) {
-// 	q := &Quote{}
-// 	err := d.db.View(func(tx *bolt.Tx) error {
+			if err != nil {
+				return fmt.Errorf("can`t serialize quote: %s", err)
+			}
+			error := bucket.Put([]byte(q.Author), buffer)
 
-// 		// TODO:
-// 		// Get the bucket with the name as specified by the constant quoteBucket.
-// 		// The bucket is available from the transaction object tx.
-// 		//
-// 		// Get the desired quote by the author's name.
-// 		//
-// 		// Again, remember to use []byte(...) to convert a string into a byte
-// 		// slice if required.
-// 		//
-// 		// Deserialize the quote into q - use the Deserialize method from
-// 		// quote.go for this.
-// 		// Remember that we are within a closure that has access to q.
-// 		//
-// 		// Check and return any error that occurs.
-// 	})
-// 	// Check the error returned by d.db.View.
-// 	// Return (nil, err) or (&q, nil), respectively.
-// }
+			if error != nil {
+				return fmt.Errorf("update data to bucket: %s", error)
+			}
+		}
+
+		return err
+	})
+
+	return err
+}
+
+// Get takes an author name and retrieves the corresponding quote from the DB.
+func (d *DB) Get(author string) (*Quote, error) {
+	q := &Quote{}
+	err := d.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(quoteBucket))
+		if bucket == nil {
+			return errors.Errorf("Cannot get %s - bucket %s not found", author, quoteBucket)
+		}
+		v := bucket.Get([]byte(author))
+
+		if v == nil {
+			return errors.New("can`t fin record")
+		}
+
+		err := q.Deserialize(v)
+		if err != nil {
+			return errors.Wrapf(err, "Get: cannot deserialize %s", v)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Get: DB.View() failed")
+	}
+
+	return q, nil
+}
+
+func (d *DB) Delete(author string) error {
+	err := d.db.Update(func(tx *bolt.Tx) error {
+		bucket, err := tx.CreateBucketIfNotExists([]byte(quoteBucket))
+		if err != nil {
+			return err
+		}
+
+		bucket.Delete([]byte(author))
+
+		return err
+	})
+
+	return err
+}
 
 // // List lists all records in the DB.
 // func (d *DB) List() ([]*Quote, error) {

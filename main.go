@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Carsinalys/go/quotes"
+	"test/quotes"
 )
 
 type Quote struct {
@@ -18,7 +18,7 @@ type Quote struct {
 }
 
 type App struct {
-	storage map[string]*Quote
+	db quotes.DB
 }
 
 func hello(w http.ResponseWriter, r *http.Request) {
@@ -29,40 +29,39 @@ func hello(w http.ResponseWriter, r *http.Request) {
 func (app *App) handlerQoute(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
-		var body Quote
+		var body *quotes.Quote
 		err := json.NewDecoder(r.Body).Decode(&body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		app.storage[body.Author] = &body
-		fmt.Printf("%v", app.storage[body.Author])
+		app.db.Create(body)
 		io.WriteString(w, "Created")
 	case "GET":
-		record := app.storage[app.getQouteKey(r.URL.Path)]
-		if record == nil {
+		q, err := app.db.Get(app.getQouteKey(r.URL.Path))
+		if err != nil {
 			http.Error(w, "Quote doesn`t exist", http.StatusBadRequest)
 			return
 		}
-		data, err := json.Marshal(record)
+
+		data, err := json.Marshal(q)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		io.WriteString(w, string(data))
 	case "PUT":
-		var body Quote
+		var body *quotes.Quote
 		err := json.NewDecoder(r.Body).Decode(&body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		app.storage[body.Author] = &body
-		fmt.Printf("%v", app.storage[body.Author])
+		app.db.Update(body)
 		io.WriteString(w, "Updated")
 	case "DELETE":
-		delete(app.storage, app.getQouteKey(r.URL.Path))
-		io.WriteString(w, "Deleted\n")
+		app.db.Delete(app.getQouteKey(r.URL.Path))
+		io.WriteString(w, "Deleted")
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
@@ -71,42 +70,47 @@ func (app *App) handlerQoute(w http.ResponseWriter, r *http.Request) {
 func (app *App) handleQoutesList(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		var data []*Quote
-		for k, v := range app.storage {
-			fmt.Println(k)
-			fmt.Println(v)
-			local := v
-			data = append(data, local)
-		}
+		// var data []*Quote
+		// for k, v := range app.storage {
+		// 	fmt.Println(k)
+		// 	fmt.Println(v)
+		// 	local := v
+		// 	data = append(data, local)
+		// }
 
-		fmt.Println(data)
-		value, err := json.Marshal(data)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+		// fmt.Println(data)
+		// value, err := json.Marshal(data)
+		// if err != nil {
+		// 	fmt.Println(err)
+		// 	return
+		// }
 
-		io.WriteString(w, string(value))
+		// io.WriteString(w, string(value))
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
 }
 
 func main() {
-	quotes.Init()
-	app := &App{
-		storage: map[string]*Quote{},
+	db, err := quotes.Open("quotesdb")
+	if err != nil {
+		log.Fatalln("Cannot open quotesdb:", err)
 	}
+
+	defer db.Close()
+
+	app := &App{db: *db}
+
 	prefix := "/api/v1/"
 
-	http.HandleFunc(prefix+"qoute/", app.handlerQoute)
-	http.HandleFunc(prefix+"qoutes/", app.handleQoutesList)
+	http.HandleFunc(prefix+"quote/", app.handlerQoute)
+	http.HandleFunc(prefix+"quotes/", app.handleQoutesList)
 	http.HandleFunc("/", hello)
 
-	err := http.ListenAndServe("localhost:8000", nil)
+	error := http.ListenAndServe("localhost:8000", nil)
 
-	if err != nil {
-		log.Fatal("ListenAndServe:", err)
+	if error != nil {
+		log.Fatal("ListenAndServe:", error)
 	}
 }
 
