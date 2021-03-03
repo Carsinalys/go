@@ -35,7 +35,11 @@ func (app *App) handlerQoute(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		app.db.Create(body)
+		err = app.db.Create(body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		io.WriteString(w, "Created")
 	case "GET":
 		q, err := app.db.Get(app.getQouteKey(r.URL.Path))
@@ -57,7 +61,11 @@ func (app *App) handlerQoute(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		app.db.Update(body)
+		err = app.db.Update(body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		io.WriteString(w, "Updated")
 	case "DELETE":
 		app.db.Delete(app.getQouteKey(r.URL.Path))
@@ -70,31 +78,24 @@ func (app *App) handlerQoute(w http.ResponseWriter, r *http.Request) {
 func (app *App) handleQoutesList(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		// var data []*Quote
-		// for k, v := range app.storage {
-		// 	fmt.Println(k)
-		// 	fmt.Println(v)
-		// 	local := v
-		// 	data = append(data, local)
-		// }
+		arr, err := app.db.List()
 
-		// fmt.Println(data)
-		// value, err := json.Marshal(data)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	return
-		// }
+		value, err := json.Marshal(arr)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-		// io.WriteString(w, string(value))
+		io.WriteString(w, string(value))
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
 }
 
 func main() {
-	db, err := quotes.Open("quotesdb")
+	db, err := quotes.Open("quotes.db")
 	if err != nil {
-		log.Fatalln("Cannot open quotesdb:", err)
+		log.Fatalln("Cannot open quotes.db:", err)
 	}
 
 	defer db.Close()

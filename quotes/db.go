@@ -38,29 +38,26 @@ func (d *DB) Close() error {
 // as the key. If the author already exists, Create returns an error.
 func (d *DB) Create(q *Quote) error {
 	err := d.db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(quoteBucket))
+		bucket, err := tx.CreateBucketIfNotExists([]byte(quoteBucket))
 
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
-		v := b.Get([]byte(q.Author))
+		v := bucket.Get([]byte(q.Author))
 
 		if v == nil {
 			buffer, err := q.Serialize()
-
 			if err != nil {
 				return fmt.Errorf("can`t serialize quote: %s", err)
 			}
-			error := b.Put([]byte(q.Author), buffer)
-
+			error := bucket.Put([]byte(q.Author), buffer)
 			if error != nil {
 				return fmt.Errorf("put data to bucket: %s", error)
 			}
+			return nil
 		}
-
-		return errors.New("recodr already exists")
+		return errors.New("record already exists")
 	})
-
 	return err
 }
 
@@ -97,15 +94,14 @@ func (d *DB) Get(author string) (*Quote, error) {
 	q := &Quote{}
 	err := d.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(quoteBucket))
+
 		if bucket == nil {
 			return errors.Errorf("Cannot get %s - bucket %s not found", author, quoteBucket)
 		}
 		v := bucket.Get([]byte(author))
-
 		if v == nil {
 			return errors.New("can`t fin record")
 		}
-
 		err := q.Deserialize(v)
 		if err != nil {
 			return errors.Wrapf(err, "Get: cannot deserialize %s", v)
@@ -135,27 +131,37 @@ func (d *DB) Delete(author string) error {
 	return err
 }
 
-// // List lists all records in the DB.
-// func (d *DB) List() ([]*Quote, error) {
-// 	// The database returns byte slices that we need to de-serialize
-// 	// into Quote structures.
-// 	structList := []*Quote{}
+// List lists all records in the DB.
+func (d *DB) List() ([]*Quote, error) {
+	structList := []*Quote{}
 
-// 	// We use a View as we don't update anything.
-// 	err := d.db.View(func(tx *bolt.Tx) error {
+	err := d.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(quoteBucket))
 
-// 		// TODO:
-// 		// Get the bucket from the transaction tx.
-// 		//
-// 		// Iterate over all elements of the bucket.
-// 		// Hint: BoltDB has a ForEach method for this.
-// 		//   * For each element, create a new *Quote and deserialize
-// 		//     the element value into the *Quote.
-// 		//   * Then append the *Quote to structList.
-// 		//
-// 		// Check and return any errors.
-// 	})
+		if b == nil {
+			return nil
+		}
 
-// 	// TODO: Check the error returned by d.db.View().
-// 	// Return (structList, nil) or (nil, err), respectively.
-// }
+		err := b.ForEach(func(k, v []byte) error {
+			q := &Quote{}
+			err := q.Deserialize(v)
+			if err != nil {
+				return errors.Wrapf(err, "List: cannot deserialize data of author %s", k)
+			}
+			structList = append(structList, q)
+
+			return nil
+		})
+
+		if err != nil {
+			return errors.Wrapf(err, "List: failed iterating over bucket %s", quoteBucket)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Get: DB.View() failed")
+	}
+
+	return structList, nil
+}

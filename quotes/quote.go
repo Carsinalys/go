@@ -33,7 +33,7 @@ func (q Quote) Serialize() ([]byte, error) {
 func (q *Quote) Deserialize(b []byte) error {
 	buf := bytes.NewBuffer(b)
 	dec := gob.NewDecoder(buf)
-	err := dec.Decode(q)
+	err := dec.Decode(&q)
 	if err != nil {
 		return errors.Wrapf(err, "Deserialize: decoding failed for %s", b)
 	}
