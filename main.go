@@ -21,11 +21,13 @@ type App struct {
 	db quotes.DB
 }
 
+// dummy handler - all routes witch not handled
 func hello(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "Hello, world!\n")
 	io.WriteString(w, "URL:"+r.URL.Path)
 }
 
+// quote CRUD handler
 func (app *App) handlerQoute(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
@@ -75,6 +77,7 @@ func (app *App) handlerQoute(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GET quote list handler
 func (app *App) handleQoutesList(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
@@ -115,6 +118,7 @@ func main() {
 	}
 }
 
+// get quote author key from path
 func (app *App) getQouteKey(path string) string {
 	arr := strings.Split(path, "/")
 	last := arr[len(arr)-1]

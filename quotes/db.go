@@ -116,6 +116,7 @@ func (d *DB) Get(author string) (*Quote, error) {
 	return q, nil
 }
 
+// delete quote from DB
 func (d *DB) Delete(author string) error {
 	err := d.db.Update(func(tx *bolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists([]byte(quoteBucket))
