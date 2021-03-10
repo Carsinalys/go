@@ -3,6 +3,7 @@ package boid
 import (
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -28,36 +29,60 @@ const (
 var (
 	Boids   [BoidCount]*Boid
 	BoidMap [Screenwidth + 1][Screenheight + 1]int
+	rwlock  = sync.RWMutex{}
 )
 
 func (b *Boid) calcAcceleration() Vector2d {
 	upper, lower := b.Position.AddV(viewRadius), b.Position.AddV(-viewRadius)
-	avgVelocity := Vector2d{0, 0}
+	avgPosition, avgVelocity, separation := Vector2d{0, 0}, Vector2d{0, 0}, Vector2d{0, 0}
 	count := 0.0
 
+	rwlock.RLock()
 	for i := math.Max(lower.X, 0); i <= math.Min(upper.X, Screenwidth); i++ {
 		for j := math.Max(lower.Y, 0); j <= math.Min(upper.Y, Screenheight); j++ {
 			if otherboid := BoidMap[int(i)][int(j)]; otherboid != -1 && otherboid != b.id {
 				if dist := Boids[otherboid].Position.Distance(b.Position); dist < viewRadius {
 					count++
 					avgVelocity = avgVelocity.Add(Boids[otherboid].Velocity)
+					avgPosition = avgPosition.Add(Boids[otherboid].Position)
+					temp := b.Position.Subtract(Boids[otherboid].Position)
+					temp = temp.DivisionV(dist)
+					separation = separation.Add(temp)
 				}
 			}
 		}
 	}
+	rwlock.RUnlock()
 
-	accel := Vector2d{0, 0}
+	accel := Vector2d{b.borderBounce(b.Position.X, Screenwidth), b.borderBounce(b.Position.Y, Screenheight)}
 	if count > 0 {
-		avgVelocity = avgVelocity.DivisionV(count)
-		avgVelocity = avgVelocity.Subtract(b.Velocity)
-		accel = avgVelocity.MultiplyV(adjRate)
+		avgPosition, avgVelocity = avgPosition.DivisionV(count), avgVelocity.DivisionV(count)
+		accelAlignment := avgVelocity.Subtract(b.Velocity)
+		accelAlignment = accelAlignment.MultiplyV(adjRate)
+		accelCohesion := avgPosition.Subtract(b.Position)
+		accelCohesion = accelCohesion.MultiplyV(adjRate)
+		accelSeparation := separation.MultiplyV(adjRate)
+		accel = accel.Add(accelAlignment)
+		accel = accel.Add(accelCohesion)
+		accel = accel.Add(accelSeparation)
 	}
 
 	return accel
 }
 
+func (b *Boid) borderBounce(pos, maxBorderPos float64) float64 {
+	if pos < viewRadius {
+		return 1 / pos
+	} else if pos > maxBorderPos-viewRadius {
+		return 1 / (pos - maxBorderPos)
+	}
+	return 0
+}
+
 func (b *Boid) moveOne() {
-	b.Velocity = b.Velocity.Add(b.calcAcceleration())
+	acceleration := b.calcAcceleration()
+	rwlock.Lock()
+	b.Velocity = b.Velocity.Add(acceleration)
 	b.Velocity = b.Velocity.Limit(-1, 1)
 	BoidMap[int(b.Position.X)][int(b.Position.Y)] = -1
 	b.Position = b.Position.Add(b.Velocity)
@@ -71,6 +96,7 @@ func (b *Boid) moveOne() {
 	if next.Y >= Screenheight || next.Y < 0 {
 		b.Velocity = Vector2d{b.Velocity.X, -b.Velocity.Y}
 	}
+	rwlock.Unlock()
 }
 
 func (b *Boid) start() {
