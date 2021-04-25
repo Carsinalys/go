@@ -8,6 +8,7 @@ require (
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/graphql-go/graphql v0.7.9 // indirect
+	github.com/jackc/pgx/v4 v4.11.0 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect

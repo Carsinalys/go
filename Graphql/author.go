@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -76,8 +79,13 @@ func RegisterEndpoint(res http.ResponseWriter, req *http.Request) {
 	author.Id = uuid.NewV4().String()
 	hash, _ := bcrypt.GenerateFromPassword([]byte(author.Password), 10)
 	author.Password = string(hash)
-	authors = append(authors, author)
-	json.NewEncoder(res).Encode(authors)
+	_, error := DBConnection.Exec(context.Background(), "insert into authors(id, firstname, lastname, username, password) values($1, $2, $3, $4, $5)", author.Id, author.FirstName, author.LastName, author.UserName, author.Password)
+	if error != nil {
+		fmt.Fprintf(os.Stderr, "Unable to insert record to database: %v\n", error)
+		json.NewEncoder(res).Encode(error.Error())
+		return
+	}
+	json.NewEncoder(res).Encode(author)
 }
 
 func LoginEndpoint(res http.ResponseWriter, req *http.Request) {
@@ -91,26 +99,28 @@ func LoginEndpoint(res http.ResponseWriter, req *http.Request) {
 		res.Write([]byte(`{ "error": "` + err.Error() + `"}`))
 		return
 	}
-	for _, author := range authors {
-		if author.UserName == data.UserName {
-			err := bcrypt.CompareHashAndPassword([]byte(author.Password), []byte(data.Password))
-			if err != nil {
-				res.WriteHeader(400)
-				res.Write([]byte(`{ "error": "invalid password"`))
-				return
-			}
-			claims := CustomJWTClaims{
-				Id: author.Id,
-				StandardClaims: jwt.StandardClaims{
-					ExpiresAt: time.Now().Local().Add(time.Hour).Unix(),
-					Issuer:    "something you can indetify",
-				},
-			}
-			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-			tokenString, _ := token.SignedString(JWT_SECRET)
-			res.Write([]byte(`{ "token": "` + tokenString + `"}`))
-			return
-		}
+	var userDB Author
+	query := fmt.Sprintf("select * from authors where username='%v'", data.UserName)
+	error := DBConnection.QueryRow(context.Background(), query).Scan(&userDB.Id, &userDB.FirstName, &userDB.LastName, &userDB.UserName, &userDB.Password)
+	if error != nil {
+		fmt.Fprintf(os.Stderr, "Unable to find user in database: %v\n", error)
+		json.NewEncoder(res).Encode(Author{})
+		return
 	}
-	json.NewEncoder(res).Encode(Author{})
+	err = bcrypt.CompareHashAndPassword([]byte(userDB.Password), []byte(data.Password))
+	if err != nil {
+		res.WriteHeader(400)
+		res.Write([]byte(`{ "error": "invalid password"`))
+		return
+	}
+	claims := CustomJWTClaims{
+		Id: userDB.Id,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Local().Add(time.Hour).Unix(),
+			Issuer:    "something you can indetify",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString(JWT_SECRET)
+	res.Write([]byte(`{ "token": "` + tokenString + `"}`))
 }

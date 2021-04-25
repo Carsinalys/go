@@ -1,6 +1,10 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"os"
+
 	"github.com/graphql-go/graphql"
 )
 
@@ -21,12 +25,14 @@ var articleType *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 			Type: authorType,
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 				article := params.Source.(Article)
-				for _, author := range authors {
-					if author.Id == article.Author {
-						return author, nil
-					}
+				var userDB Author
+				query := fmt.Sprintf("select * from authors where id='%v'", article.Author)
+				error := DBConnection.QueryRow(context.Background(), query).Scan(&userDB.Id, &userDB.FirstName, &userDB.LastName, &userDB.UserName, &userDB.Password)
+				if error != nil {
+					fmt.Fprintf(os.Stderr, "Unable to find user in database: %v\n", error)
+					return nil, error
 				}
-				return nil, nil
+				return userDB, nil
 			},
 		},
 		"title": &graphql.Field{
@@ -41,6 +47,9 @@ var articleType *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 var articleInputType *graphql.InputObject = graphql.NewInputObject(graphql.InputObjectConfig{
 	Name: "ArticleInput",
 	Fields: graphql.InputObjectConfigFieldMap{
+		"id": &graphql.InputObjectFieldConfig{
+			Type: graphql.String,
+		},
 		"title": &graphql.InputObjectFieldConfig{
 			Type: graphql.String,
 		},

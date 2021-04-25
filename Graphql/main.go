@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/graphql-go/graphql"
+	"github.com/jackc/pgx/v4"
 	"github.com/mitchellh/mapstructure"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -38,7 +40,8 @@ var (
 		{Id: "2", Author: "2", Title: "Test title2", Content: "daefklcjiuaibuyabuybcauy"},
 		{Id: "3", Author: "3", Title: "Test title3", Content: "ciugiusydgvuyasgvuyawyvu"},
 	}
-	JWT_SECRET []byte = []byte("some strong key")
+	JWT_SECRET   []byte = []byte("some strong key")
+	DBConnection *pgx.Conn
 )
 
 func ValidateJWT(t string) (interface{}, error) {
@@ -66,7 +69,23 @@ var rootQuery *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 		"authors": &graphql.Field{
 			Type: graphql.NewList(authorType),
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-				return authors, nil
+				rows, err := DBConnection.Query(context.Background(), "select * from authors")
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Unable to get users from database: %v\n", err)
+					return err, nil
+				}
+				defer rows.Close()
+				var result []Author
+				for rows.Next() {
+					var r Author
+					err = rows.Scan(&r.Id, &r.FirstName, &r.LastName, &r.UserName, &r.Password)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Unable to scan %v\n", err)
+						return err, nil
+					}
+					result = append(result, r)
+				}
+				return result, nil
 			},
 		},
 		"author": &graphql.Field{
@@ -78,12 +97,14 @@ var rootQuery *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 				id := params.Args["id"].(string)
-				for _, author := range authors {
-					if author.Id == id {
-						return author, nil
-					}
+				var result Author
+				query := fmt.Sprintf("select * from authors where id='%v'", id)
+				err := DBConnection.QueryRow(context.Background(), query).Scan(&result.Id, &result.FirstName, &result.LastName, &result.UserName, &result.Password)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Unable to find user in database: %v\n", err)
+					return nil, err
 				}
-				return nil, nil
+				return result, nil
 			},
 		},
 		"articles": &graphql.Field{
@@ -115,8 +136,8 @@ var rootQuery *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 	Name: "Mutation",
 	Fields: graphql.Fields{
-		"deleteAutor": &graphql.Field{
-			Type: graphql.NewList(authorType),
+		"deleteAuthor": &graphql.Field{
+			Type: authorType,
 			Args: graphql.FieldConfigArgument{
 				"id": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
@@ -124,19 +145,17 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 				id := params.Args["id"].(string)
-
-				for index, author := range authors {
-					if author.Id == id {
-						authors = append(authors[:index], authors[index+1:]...)
-
-						return authors, nil
-					}
+				query := fmt.Sprintf("delete from authors where id='%v'", id)
+				_, err := DBConnection.Exec(context.Background(), query)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Unable to delete record from database: %v\n", err)
+					return nil, err
 				}
-				return nil, errors.New("not found")
+				return Author{Id: id}, nil
 			},
 		},
-		"updateAutor": &graphql.Field{
-			Type: graphql.NewList(authorType),
+		"updateAuthor": &graphql.Field{
+			Type: authorType,
 			Args: graphql.FieldConfigArgument{
 				"author": &graphql.ArgumentConfig{
 					Type: authorInputType,
@@ -146,36 +165,42 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 				var changes Author
 				mapstructure.Decode(params.Args["author"], &changes)
 				validate := validator.New()
-				for index, author := range authors {
-					if author.Id == changes.Id {
-						if changes.FirstName != "" {
-							author.FirstName = changes.FirstName
-						}
-						if changes.LastName != "" {
-							author.LastName = changes.LastName
-						}
-						if changes.UserName != "" {
-							author.UserName = changes.UserName
-						}
-						if changes.Password != "" {
-							err := validate.Var(changes.Password, "gte=4")
-							if err != nil {
-								return nil, err
-							}
-							hash, _ := bcrypt.GenerateFromPassword([]byte(changes.Password), 10)
-							author.Password = string(hash)
-						}
-
-						authors[index] = author
-
-						return authors, nil
-					}
+				var dbAuthor Author
+				query := fmt.Sprintf("select * from authors where id='%v'", changes.Id)
+				err := DBConnection.QueryRow(context.Background(), query).Scan(&dbAuthor.Id, &dbAuthor.FirstName, &dbAuthor.LastName, &dbAuthor.UserName, &dbAuthor.Password)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Unable to find user in database: %v\n", err)
+					return nil, err
 				}
-				return nil, errors.New("not found")
+				if changes.FirstName != "" {
+					dbAuthor.FirstName = changes.FirstName
+				}
+				if changes.LastName != "" {
+					dbAuthor.LastName = changes.LastName
+				}
+				if changes.UserName != "" {
+					dbAuthor.UserName = changes.UserName
+				}
+				if changes.Password != "" {
+					err := validate.Var(changes.Password, "gte=4")
+					if err != nil {
+						return nil, err
+					}
+					hash, _ := bcrypt.GenerateFromPassword([]byte(changes.Password), 10)
+					dbAuthor.Password = string(hash)
+				}
+				query = fmt.Sprintf("update authors set firstname='%v', lastname='%v', username='%v', password='%v' where id='%v'", dbAuthor.FirstName, dbAuthor.LastName, dbAuthor.UserName, dbAuthor.Password, dbAuthor.Id)
+				_, error := DBConnection.Exec(context.Background(), query)
+				if error != nil {
+					fmt.Fprintf(os.Stderr, "Unable to insert record to database: %v\n", error)
+					return nil, error
+				}
+
+				return dbAuthor, nil
 			},
 		},
 		"createArticle": &graphql.Field{
-			Type: graphql.NewList(articleType),
+			Type: articleType,
 			Args: graphql.FieldConfigArgument{
 				"article": &graphql.ArgumentConfig{
 					Type: articleInputType,
@@ -195,13 +220,16 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 				}
 				article.Id = uuid.NewV4().String()
 				article.Author = decoded.(CustomJWTClaims).Id
-				articles = append(articles, article)
-
-				return articles, nil
+				_, error := DBConnection.Exec(context.Background(), "insert into articles(id, author, title, content) values($1, $2, $3, $4)", article.Id, article.Author, article.Title, article.Content)
+				if error != nil {
+					fmt.Fprintf(os.Stderr, "Unable to insert record to database: %v\n", error)
+					return nil, error
+				}
+				return article, nil
 			},
 		},
 		"deleteArticle": &graphql.Field{
-			Type: graphql.NewList(articleType),
+			Type: articleType,
 			Args: graphql.FieldConfigArgument{
 				"id": &graphql.ArgumentConfig{
 					Type: graphql.NewNonNull(graphql.String),
@@ -209,19 +237,17 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 				id := params.Args["id"].(string)
-
-				for index, article := range articles {
-					if article.Id == id {
-						articles = append(articles[:index], articles[index+1:]...)
-
-						return articles, nil
-					}
+				query := fmt.Sprintf("delete from articles where id='%v'", id)
+				_, err := DBConnection.Exec(context.Background(), query)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Unable to delete record from database: %v\n", err)
+					return nil, err
 				}
-				return nil, errors.New("not found")
+				return Article{Id: id}, nil
 			},
 		},
 		"updateArticle": &graphql.Field{
-			Type: graphql.NewList(articleType),
+			Type: articleType,
 			Args: graphql.FieldConfigArgument{
 				"article": &graphql.ArgumentConfig{
 					Type: articleInputType,
@@ -230,21 +256,27 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 				var changes Article
 				mapstructure.Decode(params.Args["article"], &changes)
-				for index, article := range articles {
-					if article.Id == changes.Id {
-						if changes.Title != "" {
-							article.Title = changes.Title
-						}
-						if changes.Content != "" {
-							article.Content = changes.Content
-						}
-
-						articles[index] = article
-
-						return articles, nil
-					}
+				var dbArticle Article
+				query := fmt.Sprintf("select * from articles where id='%v'", changes.Id)
+				err := DBConnection.QueryRow(context.Background(), query).Scan(&dbArticle.Id, &dbArticle.Author, &dbArticle.Title, &dbArticle.Content)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Unable to find article in database: %v\n", err)
+					return nil, err
 				}
-				return nil, errors.New("not found")
+				if changes.Title != "" {
+					dbArticle.Title = changes.Title
+				}
+				if changes.Content != "" {
+					dbArticle.Content = changes.Content
+				}
+				query = fmt.Sprintf("update articles set title='%v', content='%v' where id='%v'", dbArticle.Title, dbArticle.Content, dbArticle.Id)
+				_, error := DBConnection.Exec(context.Background(), query)
+				if error != nil {
+					fmt.Fprintf(os.Stderr, "Unable to insert record to database: %v\n", error)
+					return nil, error
+				}
+
+				return dbArticle, nil
 			},
 		},
 	},
@@ -282,5 +314,14 @@ func main() {
 		"POST", "PUT", "DELETE", "GET",
 	})
 	origins := handlers.AllowedOrigins([]string{"*"})
+
+	urlExample := "postgres://cardinalys:cardinalys@localhost:5432/godb"
+	conn, err := pgx.Connect(context.Background(), urlExample)
+	DBConnection = conn
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
+		os.Exit(1)
+	}
+	defer DBConnection.Close(context.Background())
 	http.ListenAndServe(":8080", handlers.CORS(headers, methods, origins)(router))
 }
