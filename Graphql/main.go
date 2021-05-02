@@ -110,7 +110,23 @@ var rootQuery *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 		"articles": &graphql.Field{
 			Type: graphql.NewList(articleType),
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-				return articles, nil
+				rows, err := DBConnection.Query(context.Background(), "select * from articles")
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Unable to get articles from database: %v\n", err)
+					return err, nil
+				}
+				defer rows.Close()
+				var result []Article
+				for rows.Next() {
+					var r Article
+					err = rows.Scan(&r.Id, &r.Author, &r.Title, &r.Content)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Unable to scan %v\n", err)
+						return err, nil
+					}
+					result = append(result, r)
+				}
+				return result, nil
 			},
 		},
 		"article": &graphql.Field{
@@ -122,12 +138,14 @@ var rootQuery *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 				id := params.Args["id"].(string)
-				for _, article := range authors {
-					if article.Id == id {
-						return article, nil
-					}
+				var result Article
+				query := fmt.Sprintf("select * from articles where id='%v'", id)
+				err := DBConnection.QueryRow(context.Background(), query).Scan(&result.Id, &result.Author, &result.Title, &result.Content)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Unable to find article in database: %v\n", err)
+					return nil, err
 				}
-				return nil, nil
+				return result, nil
 			},
 		},
 	},

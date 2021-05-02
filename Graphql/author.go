@@ -122,5 +122,5 @@ func LoginEndpoint(res http.ResponseWriter, req *http.Request) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, _ := token.SignedString(JWT_SECRET)
-	res.Write([]byte(`{ "token": "` + tokenString + `"}`))
+	res.Write([]byte(`{ "token": "` + tokenString + `", "id": "` + claims.Id + `"}`))
 }
