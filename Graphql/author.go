@@ -82,6 +82,7 @@ func RegisterEndpoint(res http.ResponseWriter, req *http.Request) {
 	_, error := DBConnection.Exec(context.Background(), "insert into authors(id, firstname, lastname, username, password) values($1, $2, $3, $4, $5)", author.Id, author.FirstName, author.LastName, author.UserName, author.Password)
 	if error != nil {
 		fmt.Fprintf(os.Stderr, "Unable to insert record to database: %v\n", error)
+		res.WriteHeader(400)
 		json.NewEncoder(res).Encode(error.Error())
 		return
 	}
@@ -104,6 +105,7 @@ func LoginEndpoint(res http.ResponseWriter, req *http.Request) {
 	error := DBConnection.QueryRow(context.Background(), query).Scan(&userDB.Id, &userDB.FirstName, &userDB.LastName, &userDB.UserName, &userDB.Password)
 	if error != nil {
 		fmt.Fprintf(os.Stderr, "Unable to find user in database: %v\n", error)
+		res.WriteHeader(400)
 		json.NewEncoder(res).Encode(Author{})
 		return
 	}

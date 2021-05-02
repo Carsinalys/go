@@ -309,22 +309,7 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 func main() {
 	fmt.Println("Starting app...")
 	router := mux.NewRouter()
-	schema, _ := graphql.NewSchema(graphql.SchemaConfig{
-		Query:    rootQuery,
-		Mutation: rootMutation,
-	})
-	router.HandleFunc("/graphql", func(res http.ResponseWriter, req *http.Request) {
-		res.Header().Set("content-type", "application/json")
-		var payload GraphQLPayload
-		json.NewDecoder(req.Body).Decode(&payload)
-		result := graphql.Do(graphql.Params{
-			Schema:         schema,
-			RequestString:  payload.Query,
-			VariableValues: payload.Variables,
-			Context:        context.WithValue(context.Background(), "token", getToken(req.Cookies())),
-		})
-		json.NewEncoder(res).Encode(result)
-	})
+	router.HandleFunc("/graphql", GraphqlHandler).Methods("POST")
 	router.HandleFunc("/register", RegisterEndpoint).Methods("POST")
 	router.HandleFunc("/login", LoginEndpoint).Methods("POST")
 	headers := handlers.AllowedHeaders(
@@ -348,6 +333,27 @@ func main() {
 	}
 	defer DBConnection.Close(context.Background())
 	http.ListenAndServe(":8080", handlers.CORS(headers, methods, origins)(router))
+}
+
+func GraphqlHandler(res http.ResponseWriter, req *http.Request) {
+	schema, _ := graphql.NewSchema(graphql.SchemaConfig{
+		Query:    rootQuery,
+		Mutation: rootMutation,
+	})
+	fmt.Printf("===========1 %v\n", schema)
+	res.Header().Set("content-type", "application/json")
+	var payload GraphQLPayload
+	fmt.Printf("===========2-1 %v\n", req.Body)
+	json.NewDecoder(req.Body).Decode(&payload)
+	fmt.Printf("===========2 %v\n", payload)
+	result := graphql.Do(graphql.Params{
+		Schema:         schema,
+		RequestString:  payload.Query,
+		VariableValues: payload.Variables,
+		Context:        context.WithValue(context.Background(), "token", getToken(req.Cookies())),
+	})
+	fmt.Printf("===========3 %v\n", result)
+	json.NewEncoder(res).Encode(result)
 }
 
 func getToken(cookies []*http.Cookie) string {
