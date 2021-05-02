@@ -30,16 +30,6 @@ type CustomJWTClaims struct {
 }
 
 var (
-	authors = []Author{
-		{Id: "1", FirstName: "Test1", LastName: "WTF1", UserName: "Cardinal1", Password: "123"},
-		{Id: "2", FirstName: "Test2", LastName: "WTF2", UserName: "Cardinal2", Password: "1234"},
-		{Id: "3", FirstName: "Test3", LastName: "WTF3", UserName: "Cardinal3", Password: "12345"},
-	}
-	articles = []Article{
-		{Id: "1", Author: "1", Title: "Test title1", Content: "fjkabfjhabhjabshjkasbk"},
-		{Id: "2", Author: "2", Title: "Test title2", Content: "daefklcjiuaibuyabuybcauy"},
-		{Id: "3", Author: "3", Title: "Test title3", Content: "ciugiusydgvuyasgvuyawyvu"},
-	}
 	JWT_SECRET   []byte = []byte("some strong key")
 	DBConnection *pgx.Conn
 )
@@ -162,9 +152,13 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 				},
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				_, err := ValidateJWT(params.Context.Value("token").(string))
+				if err != nil {
+					return nil, err
+				}
 				id := params.Args["id"].(string)
 				query := fmt.Sprintf("delete from authors where id='%v'", id)
-				_, err := DBConnection.Exec(context.Background(), query)
+				_, err = DBConnection.Exec(context.Background(), query)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Unable to delete record from database: %v\n", err)
 					return nil, err
@@ -180,12 +174,16 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 				},
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				decoded, err := ValidateJWT(params.Context.Value("token").(string))
+				if err != nil {
+					return nil, err
+				}
 				var changes Author
 				mapstructure.Decode(params.Args["author"], &changes)
 				validate := validator.New()
 				var dbAuthor Author
-				query := fmt.Sprintf("select * from authors where id='%v'", changes.Id)
-				err := DBConnection.QueryRow(context.Background(), query).Scan(&dbAuthor.Id, &dbAuthor.FirstName, &dbAuthor.LastName, &dbAuthor.UserName, &dbAuthor.Password)
+				query := fmt.Sprintf("select * from authors where id='%v'", decoded.(CustomJWTClaims).Id)
+				err = DBConnection.QueryRow(context.Background(), query).Scan(&dbAuthor.Id, &dbAuthor.FirstName, &dbAuthor.LastName, &dbAuthor.UserName, &dbAuthor.Password)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Unable to find user in database: %v\n", err)
 					return nil, err
@@ -254,9 +252,13 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 				},
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				_, err := ValidateJWT(params.Context.Value("token").(string))
+				if err != nil {
+					return nil, err
+				}
 				id := params.Args["id"].(string)
 				query := fmt.Sprintf("delete from articles where id='%v'", id)
-				_, err := DBConnection.Exec(context.Background(), query)
+				_, err = DBConnection.Exec(context.Background(), query)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Unable to delete record from database: %v\n", err)
 					return nil, err
@@ -272,11 +274,15 @@ var rootMutation *graphql.Object = graphql.NewObject(graphql.ObjectConfig{
 				},
 			},
 			Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+				_, err := ValidateJWT(params.Context.Value("token").(string))
+				if err != nil {
+					return nil, err
+				}
 				var changes Article
 				mapstructure.Decode(params.Args["article"], &changes)
 				var dbArticle Article
 				query := fmt.Sprintf("select * from articles where id='%v'", changes.Id)
-				err := DBConnection.QueryRow(context.Background(), query).Scan(&dbArticle.Id, &dbArticle.Author, &dbArticle.Title, &dbArticle.Content)
+				err = DBConnection.QueryRow(context.Background(), query).Scan(&dbArticle.Id, &dbArticle.Author, &dbArticle.Title, &dbArticle.Content)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Unable to find article in database: %v\n", err)
 					return nil, err
@@ -315,7 +321,7 @@ func main() {
 			Schema:         schema,
 			RequestString:  payload.Query,
 			VariableValues: payload.Variables,
-			Context:        context.WithValue(context.Background(), "token", req.URL.Query().Get("token")),
+			Context:        context.WithValue(context.Background(), "token", getToken(req.Cookies())),
 		})
 		json.NewEncoder(res).Encode(result)
 	})
@@ -342,4 +348,15 @@ func main() {
 	}
 	defer DBConnection.Close(context.Background())
 	http.ListenAndServe(":8080", handlers.CORS(headers, methods, origins)(router))
+}
+
+func getToken(cookies []*http.Cookie) string {
+	token := ""
+	for _, c := range cookies {
+		if c.Name == "jwt" {
+			token = c.Value
+		}
+	}
+
+	return token
 }

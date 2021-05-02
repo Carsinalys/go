@@ -122,5 +122,14 @@ func LoginEndpoint(res http.ResponseWriter, req *http.Request) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, _ := token.SignedString(JWT_SECRET)
-	res.Write([]byte(`{ "token": "` + tokenString + `", "id": "` + claims.Id + `"}`))
+	//uncomment fields for working in browser
+	cookie := &http.Cookie{
+		Name:  "jwt",
+		Value: tokenString,
+		// Secure:  true,
+		Expires: time.Now().Add(24 * time.Hour),
+		// HttpOnly: true,
+	}
+	http.SetCookie(res, cookie)
+	res.Write([]byte(`{ "id": "` + claims.Id + `"}`))
 }
