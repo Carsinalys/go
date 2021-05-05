@@ -16,6 +16,22 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
+type GraphqlUpdateAuthor struct {
+	Data struct {
+		UpdateAuthor struct {
+			Author
+		} `json:"updateAuthor"`
+	} `json:"data"`
+}
+
+type GraphqlDeleteAuthor struct {
+	Data struct {
+		DeleteAuthor struct {
+			Author
+		} `json:"deleteAuthor"`
+	} `json:"data"`
+}
+
 var (
 	urlExample = "postgres://cardinalys:cardinalys@localhost:5432/godb"
 	mockAuthor = Author{
@@ -120,10 +136,16 @@ func TestUserUpdate(t *testing.T) {
 	connectDB()
 	newAuthor := dbAuthor
 	newAuthor.FirstName = "John Weak"
-	fmt.Printf("===>>>1 %v\n", newAuthor)
-	mutation := `"query": "{mutation { updateAuthor(author: { id: "` + newAuthor.Id + `" firstname: "` + newAuthor.FirstName + `" lastname: "` + newAuthor.LastName + `" username: "` + newAuthor.UserName + `" password: "` + newAuthor.Password + `" }) { id, firstname, lastname, username, password }}}"`
-	fmt.Printf("===>>>2 %v\n", bytes.NewBuffer([]byte(mutation)))
-	req, err := http.NewRequest("POST", "/graphql", bytes.NewBuffer([]byte(mutation)))
+	postBody, error := json.Marshal(map[string]string{
+		"query":         `mutation { updateAuthor(author: { id: "` + newAuthor.Id + `" firstname: "` + newAuthor.FirstName + `" lastname: "` + newAuthor.LastName + `" username: "` + newAuthor.UserName + `" password: "` + newAuthor.Password + `" }) { id, firstname, lastname, username, password }}`,
+		"operationName": "updateAuthor",
+	})
+	if error != nil {
+		t.Fatal(error)
+	}
+	body := bytes.NewBuffer(postBody)
+	req, err := http.NewRequest("POST", "/graphql", body)
+	req.Header.Add("Content-Type", "application/json")
 	addCookie(req)
 	if err != nil {
 		t.Fatal(err)
@@ -131,25 +153,39 @@ func TestUserUpdate(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(GraphqlHandler)
 	handler.ServeHTTP(rr, req)
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-	var data Author
+	var data GraphqlUpdateAuthor
 	json.NewDecoder(rr.Body).Decode(&data)
-	fmt.Printf("===>>>3 %v\n", data)
+	if data.Data.UpdateAuthor.FirstName != "John Weak" {
+		t.Fatal("Unable to update author.")
+	}
 	defer DBConnection.Close(context.Background())
 }
 
-func TestClearTable(t *testing.T) {
+func TestUserDelete(t *testing.T) {
 	connectDB()
-
-	query := fmt.Sprintf("delete from authors where id='%v'", dbAuthor.Id)
-	_, err := DBConnection.Exec(context.Background(), query)
-	if err != nil {
-		t.Errorf("Unable to delete record from database: %v\n", err)
+	postBody, error := json.Marshal(map[string]string{
+		"query":         `mutation { deleteAuthor(id: "` + dbAuthor.Id + `") { id }}`,
+		"operationName": "deleteAuthor",
+	})
+	if error != nil {
+		t.Fatal(error)
 	}
-
+	body := bytes.NewBuffer(postBody)
+	req, err := http.NewRequest("POST", "/graphql", body)
+	req.Header.Add("Content-Type", "application/json")
+	addCookie(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(GraphqlHandler)
+	handler.ServeHTTP(rr, req)
+	var result Author
+	query := fmt.Sprintf("delete from authors where username='%v'", dbAuthor.UserName)
+	err = DBConnection.QueryRow(context.Background(), query).Scan(&result.Id, &result.UserName, &result.FirstName, &result.LastName, &result.Password)
+	if err == nil {
+		t.Fatal(err)
+	}
 	defer DBConnection.Close(context.Background())
 }
 

@@ -340,19 +340,15 @@ func GraphqlHandler(res http.ResponseWriter, req *http.Request) {
 		Query:    rootQuery,
 		Mutation: rootMutation,
 	})
-	fmt.Printf("===========1 %v\n", schema)
 	res.Header().Set("content-type", "application/json")
 	var payload GraphQLPayload
-	fmt.Printf("===========2-1 %v\n", req.Body)
 	json.NewDecoder(req.Body).Decode(&payload)
-	fmt.Printf("===========2 %v\n", payload)
 	result := graphql.Do(graphql.Params{
 		Schema:         schema,
 		RequestString:  payload.Query,
 		VariableValues: payload.Variables,
 		Context:        context.WithValue(context.Background(), "token", getToken(req.Cookies())),
 	})
-	fmt.Printf("===========3 %v\n", result)
 	json.NewEncoder(res).Encode(result)
 }
 

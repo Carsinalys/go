@@ -81,7 +81,11 @@ func (app *App) handlerQoute(w http.ResponseWriter, r *http.Request) {
 func (app *App) handleQoutesList(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		arr, err := app.db.List()
+		arr, error := app.db.List()
+		if error != nil {
+			fmt.Println(error)
+			return
+		}
 
 		value, err := json.Marshal(arr)
 		if err != nil {
