@@ -266,8 +266,8 @@ func TestGetUsers(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	var data GraphqlGetAuthors
 	json.NewDecoder(rr.Body).Decode(&data)
-	if len(data.Data.Authors) != 1 {
-		t.Fatal("Get all authors error expect 1!")
+	if len(data.Data.Authors) == 0 {
+		t.Fatal("Get all authors error expect more than 0!")
 	}
 	defer DBConnection.Close(context.Background())
 }

@@ -69,6 +69,7 @@ func RegisterEndpoint(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	var author Author
 	json.NewDecoder(req.Body).Decode(&author)
+	defer req.Body.Close()
 	validate := validator.New()
 	err := validate.Struct(author)
 	if err != nil {
@@ -93,6 +94,7 @@ func LoginEndpoint(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	var data Author
 	json.NewDecoder(req.Body).Decode(&data)
+	defer req.Body.Close()
 	validate := validator.New()
 	err := validate.StructExcept(data, "FirstName", "LastName")
 	if err != nil {
