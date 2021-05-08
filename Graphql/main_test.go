@@ -17,73 +17,6 @@ import (
 )
 
 // this test testing all api flow of CRUD for author and article
-type GraphqlUpdateAuthor struct {
-	Data struct {
-		UpdateAuthor struct {
-			Author
-		} `json:"updateAuthor"`
-	} `json:"data"`
-}
-
-type GraphqlDeleteAuthor struct {
-	Data struct {
-		DeleteAuthor struct {
-			Author
-		} `json:"deleteAuthor"`
-	} `json:"data"`
-}
-
-type GraphqlCreateArticle struct {
-	Data struct {
-		CreateArticle struct {
-			Author struct{ Author }
-			Article
-		} `json:"createArticle"`
-	} `json:"data"`
-}
-
-type GraphqlGetArticle struct {
-	Data struct {
-		Article struct {
-			Author struct{ Author }
-			Article
-		} `json:"article"`
-	} `json:"data"`
-}
-
-type GraphqlGetAuthor struct {
-	Data struct {
-		Author struct {
-			Author
-		} `json:"author"`
-	} `json:"data"`
-}
-
-type GraphqlGetArticles struct {
-	Data struct {
-		Articles []struct {
-			Author struct{ Author }
-			Article
-		} `json:"articles"`
-	} `json:"data"`
-}
-
-type GraphqlGetAuthors struct {
-	Data struct {
-		Authors []struct {
-			Author
-		} `json:"authors"`
-	} `json:"data"`
-}
-
-type GraphqlUpdateArticle struct {
-	Data struct {
-		UpdateArticle struct {
-			Author struct{ Author }
-			Article
-		} `json:"updateArticle"`
-	} `json:"data"`
-}
 
 var (
 	urlExample = "postgres://cardinalys:cardinalys@localhost:5432/godb"
@@ -210,7 +143,13 @@ func TestUserUpdate(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(GraphqlHandler)
 	handler.ServeHTTP(rr, req)
-	var data GraphqlUpdateAuthor
+	var data struct {
+		Data struct {
+			UpdateAuthor struct {
+				Author
+			} `json:"updateAuthor"`
+		} `json:"data"`
+	}
 	json.NewDecoder(rr.Body).Decode(&data)
 	if data.Data.UpdateAuthor.FirstName != "John Weak" {
 		t.Fatal("Unable to update author.")
@@ -237,7 +176,13 @@ func TestGetUser(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(GraphqlHandler)
 	handler.ServeHTTP(rr, req)
-	var data GraphqlGetAuthor
+	var data struct {
+		Data struct {
+			Author struct {
+				Author
+			} `json:"author"`
+		} `json:"data"`
+	}
 	json.NewDecoder(rr.Body).Decode(&data)
 	if data.Data.Author.FirstName != "John Weak" {
 		t.Fatal("Unable to get user.")
@@ -264,7 +209,13 @@ func TestGetUsers(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(GraphqlHandler)
 	handler.ServeHTTP(rr, req)
-	var data GraphqlGetAuthors
+	var data struct {
+		Data struct {
+			Authors []struct {
+				Author
+			} `json:"authors"`
+		} `json:"data"`
+	}
 	json.NewDecoder(rr.Body).Decode(&data)
 	if len(data.Data.Authors) == 0 {
 		t.Fatal("Get all authors error expect more than 0!")
@@ -291,7 +242,14 @@ func TestCreateArticle(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(GraphqlHandler)
 	handler.ServeHTTP(rr, req)
-	var data GraphqlCreateArticle
+	var data struct {
+		Data struct {
+			CreateArticle struct {
+				Author struct{ Author }
+				Article
+			} `json:"createArticle"`
+		} `json:"data"`
+	}
 	json.NewDecoder(rr.Body).Decode(&data)
 	if data.Data.CreateArticle.Id == "" && data.Data.CreateArticle.Author.Id == "" {
 		t.Fatal("Unable to create article.")
@@ -319,7 +277,14 @@ func TestGetArticle(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(GraphqlHandler)
 	handler.ServeHTTP(rr, req)
-	var data GraphqlGetArticle
+	var data struct {
+		Data struct {
+			Article struct {
+				Author struct{ Author }
+				Article
+			} `json:"article"`
+		} `json:"data"`
+	}
 	json.NewDecoder(rr.Body).Decode(&data)
 	if data.Data.Article.Title != "test title" || data.Data.Article.Content != "test content" {
 		t.Fatal("Unable to get article.")
@@ -328,6 +293,7 @@ func TestGetArticle(t *testing.T) {
 }
 
 func TestGetArticles(t *testing.T) {
+	var articlePresent bool
 	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `query {articles { id, title, content, author { id, firstname, lastname, username, password }}}`,
@@ -346,10 +312,23 @@ func TestGetArticles(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(GraphqlHandler)
 	handler.ServeHTTP(rr, req)
-	var data GraphqlGetArticles
+	var data struct {
+		Data struct {
+			Articles []struct {
+				Author struct{ Author }
+				Article
+			} `json:"articles"`
+		} `json:"data"`
+	}
 	json.NewDecoder(rr.Body).Decode(&data)
-	if len(data.Data.Articles) != 1 {
-		t.Fatal("Get all articles error expect 1!")
+
+	for _, article := range data.Data.Articles {
+		if article.Article.Title == "test title" {
+			articlePresent = true
+		}
+	}
+	if !articlePresent {
+		t.Fatal("Don`t find article wutch should be!")
 	}
 	defer DBConnection.Close(context.Background())
 }
@@ -375,7 +354,14 @@ func TestArticleUpdate(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(GraphqlHandler)
 	handler.ServeHTTP(rr, req)
-	var data GraphqlUpdateArticle
+	var data struct {
+		Data struct {
+			UpdateArticle struct {
+				Author struct{ Author }
+				Article
+			} `json:"updateArticle"`
+		} `json:"data"`
+	}
 	json.NewDecoder(rr.Body).Decode(&data)
 	if data.Data.UpdateArticle.Title != "New Title!" {
 		t.Fatal("Unable to update article.")
