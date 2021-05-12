@@ -43,6 +43,7 @@ func connectDB() {
 	}
 }
 func TestJWTValidation(t *testing.T) {
+	t.Log("Test validation JWT function")
 	claims := CustomJWTClaims{
 		Id: "c5eecc30-084d-47f1-99a4-bf5dd1b6498f",
 		StandardClaims: jwt.StandardClaims{
@@ -63,6 +64,7 @@ func TestJWTValidation(t *testing.T) {
 }
 
 func TestRegister(t *testing.T) {
+	t.Log("Test user registration")
 	connectDB()
 	buffer, err := json.Marshal(mockAuthor)
 	if err != nil {
@@ -92,6 +94,7 @@ func TestRegister(t *testing.T) {
 }
 
 func TestLogin(t *testing.T) {
+	t.Log("Test user authentication")
 	connectDB()
 	b, err := json.Marshal(mockAuthor)
 	if err != nil {
@@ -123,6 +126,7 @@ func TestLogin(t *testing.T) {
 }
 
 func TestUserUpdate(t *testing.T) {
+	t.Log("Test user update")
 	connectDB()
 	newAuthor := dbAuthor
 	newAuthor.FirstName = "John Weak"
@@ -158,6 +162,7 @@ func TestUserUpdate(t *testing.T) {
 }
 
 func TestGetUser(t *testing.T) {
+	t.Log("Test user recieve")
 	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `query {author(id: "` + dbAuthor.Id + `") { firstname }}`,
@@ -191,6 +196,7 @@ func TestGetUser(t *testing.T) {
 }
 
 func TestGetUsers(t *testing.T) {
+	t.Log("Test users recieve")
 	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `query {authors { id }}`,
@@ -224,6 +230,7 @@ func TestGetUsers(t *testing.T) {
 }
 
 func TestCreateArticle(t *testing.T) {
+	t.Log("Test create article")
 	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `mutation { createArticle(article: { title: "` + mockArticle.Title + `" content: "` + mockArticle.Content + `"}) { id, title, content, author { id, firstname, lastname, username, password } }}`,
@@ -259,6 +266,7 @@ func TestCreateArticle(t *testing.T) {
 }
 
 func TestGetArticle(t *testing.T) {
+	t.Log("Test get created article")
 	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `query {article(id: "` + mockArticle.Id + `") { id, title, content, author { id, firstname, lastname, username, password }}}`,
@@ -293,6 +301,7 @@ func TestGetArticle(t *testing.T) {
 }
 
 func TestGetArticles(t *testing.T) {
+	t.Log("Test get articles")
 	var articlePresent bool
 	connectDB()
 	postBody, error := json.Marshal(map[string]string{
@@ -334,6 +343,7 @@ func TestGetArticles(t *testing.T) {
 }
 
 func TestArticleUpdate(t *testing.T) {
+	t.Log("Test update created article")
 	connectDB()
 	newArticle := mockArticle
 	newArticle.Title = "New Title!"
@@ -370,6 +380,7 @@ func TestArticleUpdate(t *testing.T) {
 }
 
 func TestArticleDelete(t *testing.T) {
+	t.Log("Test delete created article")
 	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `mutation { deleteArticle(id: "` + mockArticle.Id + `") { id }}`,
@@ -398,6 +409,7 @@ func TestArticleDelete(t *testing.T) {
 }
 
 func TestUserDelete(t *testing.T) {
+	t.Log("Test delete created user")
 	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `mutation { deleteAuthor(id: "` + dbAuthor.Id + `") { id }}`,
