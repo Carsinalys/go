@@ -34,7 +34,8 @@ var (
 	token    string
 )
 
-func connectDB() {
+func TestConnectDB(t *testing.T) {
+	t.Log("Test establish connection to DB")
 	conn, err := pgx.Connect(context.Background(), urlExample)
 	DBConnection = conn
 	if err != nil {
@@ -42,6 +43,7 @@ func connectDB() {
 		os.Exit(1)
 	}
 }
+
 func TestJWTValidation(t *testing.T) {
 	t.Log("Test validation JWT function")
 	claims := CustomJWTClaims{
@@ -65,7 +67,6 @@ func TestJWTValidation(t *testing.T) {
 
 func TestRegister(t *testing.T) {
 	t.Log("Test user registration")
-	connectDB()
 	buffer, err := json.Marshal(mockAuthor)
 	if err != nil {
 		t.Error(err)
@@ -90,12 +91,10 @@ func TestRegister(t *testing.T) {
 			rr.Body.String(), buffer)
 	}
 
-	defer DBConnection.Close(context.Background())
 }
 
 func TestLogin(t *testing.T) {
 	t.Log("Test user authentication")
-	connectDB()
 	b, err := json.Marshal(mockAuthor)
 	if err != nil {
 		t.Error(err)
@@ -122,12 +121,10 @@ func TestLogin(t *testing.T) {
 	dirtyToken := strings.Split(c[1], ";")
 	token = dirtyToken[0]
 
-	defer DBConnection.Close(context.Background())
 }
 
 func TestUserUpdate(t *testing.T) {
 	t.Log("Test user update")
-	connectDB()
 	newAuthor := dbAuthor
 	newAuthor.FirstName = "John Weak"
 	postBody, error := json.Marshal(map[string]string{
@@ -158,12 +155,10 @@ func TestUserUpdate(t *testing.T) {
 	if data.Data.UpdateAuthor.FirstName != "John Weak" {
 		t.Fatal("Unable to update author.")
 	}
-	defer DBConnection.Close(context.Background())
 }
 
 func TestGetUser(t *testing.T) {
 	t.Log("Test user recieve")
-	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `query {author(id: "` + dbAuthor.Id + `") { firstname }}`,
 		"operationName": "author",
@@ -192,12 +187,10 @@ func TestGetUser(t *testing.T) {
 	if data.Data.Author.FirstName != "John Weak" {
 		t.Fatal("Unable to get user.")
 	}
-	defer DBConnection.Close(context.Background())
 }
 
 func TestGetUsers(t *testing.T) {
 	t.Log("Test users recieve")
-	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `query {authors { id }}`,
 		"operationName": "authors",
@@ -226,12 +219,10 @@ func TestGetUsers(t *testing.T) {
 	if len(data.Data.Authors) == 0 {
 		t.Fatal("Get all authors error expect more than 0!")
 	}
-	defer DBConnection.Close(context.Background())
 }
 
 func TestCreateArticle(t *testing.T) {
 	t.Log("Test create article")
-	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `mutation { createArticle(article: { title: "` + mockArticle.Title + `" content: "` + mockArticle.Content + `"}) { id, title, content, author { id, firstname, lastname, username, password } }}`,
 		"operationName": "createArticle",
@@ -262,12 +253,10 @@ func TestCreateArticle(t *testing.T) {
 		t.Fatal("Unable to create article.")
 	}
 	mockArticle = data.Data.CreateArticle.Article
-	defer DBConnection.Close(context.Background())
 }
 
 func TestGetArticle(t *testing.T) {
 	t.Log("Test get created article")
-	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `query {article(id: "` + mockArticle.Id + `") { id, title, content, author { id, firstname, lastname, username, password }}}`,
 		"operationName": "article",
@@ -297,13 +286,11 @@ func TestGetArticle(t *testing.T) {
 	if data.Data.Article.Title != "test title" || data.Data.Article.Content != "test content" {
 		t.Fatal("Unable to get article.")
 	}
-	defer DBConnection.Close(context.Background())
 }
 
 func TestGetArticles(t *testing.T) {
 	t.Log("Test get articles")
 	var articlePresent bool
-	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `query {articles { id, title, content, author { id, firstname, lastname, username, password }}}`,
 		"operationName": "article",
@@ -339,12 +326,10 @@ func TestGetArticles(t *testing.T) {
 	if !articlePresent {
 		t.Fatal("Don`t find article wutch should be!")
 	}
-	defer DBConnection.Close(context.Background())
 }
 
 func TestArticleUpdate(t *testing.T) {
 	t.Log("Test update created article")
-	connectDB()
 	newArticle := mockArticle
 	newArticle.Title = "New Title!"
 	postBody, error := json.Marshal(map[string]string{
@@ -376,12 +361,10 @@ func TestArticleUpdate(t *testing.T) {
 	if data.Data.UpdateArticle.Title != "New Title!" {
 		t.Fatal("Unable to update article.")
 	}
-	defer DBConnection.Close(context.Background())
 }
 
 func TestArticleDelete(t *testing.T) {
 	t.Log("Test delete created article")
-	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `mutation { deleteArticle(id: "` + mockArticle.Id + `") { id }}`,
 		"operationName": "deleteArticle",
@@ -405,12 +388,10 @@ func TestArticleDelete(t *testing.T) {
 	if err == nil {
 		t.Fatal(err)
 	}
-	defer DBConnection.Close(context.Background())
 }
 
 func TestUserDelete(t *testing.T) {
 	t.Log("Test delete created user")
-	connectDB()
 	postBody, error := json.Marshal(map[string]string{
 		"query":         `mutation { deleteAuthor(id: "` + dbAuthor.Id + `") { id }}`,
 		"operationName": "deleteAuthor",
@@ -434,7 +415,6 @@ func TestUserDelete(t *testing.T) {
 	if err == nil {
 		t.Fatal(err)
 	}
-	defer DBConnection.Close(context.Background())
 }
 
 func addCookie(req *http.Request) {
@@ -446,4 +426,26 @@ func addCookie(req *http.Request) {
 		// HttpOnly: true,
 	}
 	req.AddCookie(cookie)
+}
+
+func BenchmarkCircle(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		TestConnectDB(&testing.T{})
+		TestRegister(&testing.T{})
+		TestLogin(&testing.T{})
+		TestUserUpdate(&testing.T{})
+		TestGetUser(&testing.T{})
+		TestGetUsers(&testing.T{})
+		TestCreateArticle(&testing.T{})
+		TestGetArticle(&testing.T{})
+		TestArticleUpdate(&testing.T{})
+		TestArticleDelete(&testing.T{})
+		TestUserDelete(&testing.T{})
+		TestDisconnectDB(&testing.T{})
+	}
+}
+
+func TestDisconnectDB(t *testing.T) {
+	t.Log("Test disconnect from DB")
+	DBConnection.Close(context.Background())
 }
